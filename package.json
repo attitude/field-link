@@ -1,0 +1,10 @@
+{
+    "name": "field-link",
+    "version": "0.1.0",
+
+    "scripts": {
+        "build": "riot components components.js",
+        "watch": "npm run watch-components",
+        "watch-components": "watch-run -i -p 'assets/*.tag' npm run build"
+    }
+}
