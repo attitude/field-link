@@ -266,7 +266,7 @@
                             });
 
                             // Remove the value
-                            $this.input.value = "";
+                            $this.input.value = '';
                             $this.update();
 
                             return;
@@ -277,6 +277,7 @@
                         e.preventDefault();
                         $this.links.push(value);
                         $this.input.value = "";
+                        data.value = null;
                         $this.$setValue(_.uniq($this.links));
                         $this.update();
 

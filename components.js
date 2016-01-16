@@ -227,7 +227,7 @@ riot.tag2('field-link', '<div> <div if="{resultsLoaded && (!opts.hasOne || opts.
                                 return;
                             });
 
-                            $this.input.value = "";
+                            $this.input.value = '';
                             $this.update();
 
                             return;
@@ -238,6 +238,7 @@ riot.tag2('field-link', '<div> <div if="{resultsLoaded && (!opts.hasOne || opts.
                         e.preventDefault();
                         $this.links.push(value);
                         $this.input.value = "";
+                        data.value = null;
                         $this.$setValue(_.uniq($this.links));
                         $this.update();
 
