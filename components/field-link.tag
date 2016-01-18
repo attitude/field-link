@@ -1,24 +1,55 @@
 <field-link>
 
     <div>
-        <div if={resultsLoaded && (!opts.hasOne || opts.hasOne && links.length < 1)} name="autocomplete" class="uk-autocomplete uk-form-icon uk-form uk-width-1-1">
+        <div if="{!resultsLoaded}" class="uk-alert" if="{!fields.length}">
+            { App.i18n.get('Loading field') }
+        </div>
+
+        <div if="{!opts.list && resultsLoaded && (!opts.hasOne || opts.hasOne && links.length < 1)}" name="autocomplete" class="uk-autocomplete uk-form-icon uk-form uk-width-1-1">
             <i class="uk-icon-link"></i>
             <input name="input" class="uk-width-1-1 uk-form-blank" autocomplete="off" type="text" placeholder="{ App.i18n.get(opts.placeholder || 'Add Link...') }">
         </div>
 
-        <div if={resultsLoaded} class="uk-margin uk-panel uk-panel-box" show="{ links && links.length }">
-            <div class="uk-margin-small-right uk-margin-small-top" each="{ link,idx in links }">
-                <a onclick="{ parent.remove }"><i class="uk-icon-close"></i></a> { linkName(link, idx) }
-            </div>
+        <div if="{opts.list && resultsLoaded}" class="uk-form-icon uk-form uk-width-1-1">
+            <i class="uk-icon-link"></i>
+            <input onkeyup="{filterEntries}" name="input" class="uk-width-1-1 uk-form-blank" autocomplete="off" type="text" placeholder="{ App.i18n.get(opts.placeholder || 'Add Link...') }">
         </div>
 
-        <div if={!resultsLoaded} class="uk-alert" if="{!fields.length}">
-            { App.i18n.get('Loading field') }
+        <div if="{resultsLoaded}" class="uk-margin uk-panel uk-panel-box" show="{ links && links.length }">
+            <ul class="uk-list" each="{ link,idx in links }">
+                <li><a onclick="{ parent.remove }"><i class="uk-icon-close"></i> { linkName(link, idx) }</a></li>
+            </ul>
+        </div>
+
+        <div if="{opts.list && resultsLoaded}" class="list-entries {entriesFiltered.length > 6 ? 'is-overflown' : ''}">
+            <ul if="{entriesFiltered.length > 0}" class="uk-list uk-list-line">
+                <li each="{entry, idx in entriesFiltered}" if="{links.indexOf(entry._id) < 0}" onclick="{toggle}">
+                    <i class="uk-icon-plus"></i>
+                    <span>{entry.name || entry.title || entry.slug || entry._id}</span>
+                </li>
+            </ul>
+            <span if="{entriesFiltered.length < 1}">No entries</span>
         </div>
 
     </div>
 
+    <style scoped>
+        .list-entries {
+            max-height: 197px;
+            overflow: auto;
+            padding: 0 15px;
+        }
+
+        .is-overflown {
+            box-shadow: inset 0 -10px 30px -20px rgba(0,0,0,0.25);
+        }
+    </style>
+
     <script>
+        if (opts.__proto__ && opts.__proto__.list) {
+            opts.list = opts.__proto__.list;
+        }
+
         // Create an array of opts.collections
         if (!opts.collections) {
             opts.collections = [];
@@ -31,8 +62,6 @@
         var $this = this,
             // List of available collections
             collections = {},
-            // List of entries matching opts.collections
-            entries = [],
             // Autocomplete defaults
             autocompleteDefaults = {
                 source: [],
@@ -96,7 +125,7 @@
                                         collectionsResolved = collectionsResolved + 1;
 
                                         if ($this.collectionsCount === collectionsResolved) {
-                                            fulfill(entries);
+                                            fulfill($this.entries);
                                         }
 
                                         continue;
@@ -134,17 +163,17 @@
                                                 }
                                             }
 
-                                            entries = entries.concat(data.result);
+                                            $this.entries = $this.entries.concat(data.result);
                                         }
 
                                         if ($this.collectionsCount === collectionsResolved) {
-                                            fulfill(entries);
+                                            fulfill($this.entries);
                                         }
                                     }).catch(function() {
                                         collectionsResolved = collectionsResolved + 1;
 
                                         if ($this.collectionsCount === collectionsResolved) {
-                                            fulfill(entries);
+                                            fulfill($this.entries);
                                         }
                                     });
                                 }
@@ -162,6 +191,10 @@
         this.resultsLoaded = false;
         this.collectionsCount = 0;
 
+        // List of entries matching opts.collections
+        this.entries = [];
+        this.entriesFiltered = [];
+
         // Translate ID into readable name || title
         this.linkName = function (id, idx) {
             // Wait for next udpate() to finish loadEntries() XHRs
@@ -169,11 +202,11 @@
                 return id;
             }
 
-            var i, l = entries.length;
+            var i, l = $this.entries.length;
 
             for (i = 0; i < l; i = i + 1) {
-                if (entries[i]._id == id) {
-                    return entries[i].name || entries[i].title || id;
+                if ($this.entries[i]._id == id) {
+                    return $this.entries[i].name || $this.entries[i].title || id;
                 }
             }
 
@@ -192,6 +225,9 @@
                 UIkit.autocomplete($this.autocomplete, _.defaults({source: data}, autocompleteDefaults));
                 // Set loaded state
                 $this.resultsLoaded = true;
+                // Sort ascending
+                $this.entries = _.sortBy($this.entries, function(o) { return o.name || o.title || o.id });
+                $this.entriesFiltered = _.clone($this.entries);
                 // Update link
                 $this.update();
             });
@@ -202,6 +238,10 @@
                     var value = e.type=='keydown' ? $this.input.value : data.value;
 
                     if (e.type=='keydown' && e.keyCode != 13) {
+                        return;
+                    }
+
+                    if (!value) {
                         return;
                     }
 
@@ -242,13 +282,13 @@
                                 }
 
                                 // Add as a valid option
-                                entries.push(data.result);
+                                $this.entries.push(data.result);
 
                                 // set value with new ID
                                 value = data.result._id;
 
                                 // Replace autocomplete instance
-                                UIkit.autocomplete($this.autocomplete, _.defaults({source: entries}, autocompleteDefaults));
+                                UIkit.autocomplete($this.autocomplete, _.defaults({source: $this.entries}, autocompleteDefaults));
 
                                 $this.links.push(value);
                                 $this.$setValue(_.uniq($this.links));
@@ -303,6 +343,91 @@
             }
 
         }.bind(this);
+
+        toggle(e) {
+            console.log(e.item.entry._id, $this.links);
+
+            // Remove
+            if (e.item && e.item.entry && $this.links.indexOf(e.item.entry._id) >= 0) {
+                this.links.splice($this.links.indexOf(e.item.entry._id), 1);
+                this.$setValue(this.links);
+            } else {
+                $this.links.push(e.item.entry._id);
+                $this.$setValue(_.uniq($this.links));
+            }
+        }
+
+        filterEntries(e) {
+            var element = e.srcElement || e.target,
+                value = element ? element.value.trim() : null;
+
+            if (e.keyCode === 13) {
+                if (opts.createNew) {
+                    console.log('Create', value);
+
+                    Cockpit.callmodule(
+                        'collections',
+                        'save',
+                        [opts.createNew, { name: value, title: value}],
+                        [opts.createNew, { name: value, title: value}]
+                    ).then(function (data) {
+                        if (!data.result) {
+                            e.stopImmediatePropagation();
+                            e.stopPropagation();
+                            e.preventDefault();
+
+                            App.ui.notify("Failed to create link. Try again later?", "danger");
+
+                            return;
+                        }
+
+                        // Remove value from input
+                        element.value = '';
+
+                        // Add as a valid option
+                        $this.entries.push(data.result);
+                        // Sort ascending
+                        $this.entries = _.sortBy($this.entries, function(o) { return o.name || o.title || o.id });
+                        $this.entriesFiltered = _.clone($this.entries);
+
+                        // set value with new ID
+                        $this.links.push(data.result._id);
+                        $this.$setValue(_.uniq($this.links));
+                        $this.update();
+
+                        return;
+                    }).catch(function (data) {
+                        App.ui.notify("Failed to create link. Try again later?", "danger");
+                        $this.update();
+                        return;
+                    });
+                } else {
+                    App.ui.notify("Link does not exist.", "danger");
+                }
+
+                return;
+            }
+
+            value = value.toLowerCase().replace(/\s+/g, '')
+
+            if (!value) {
+                $this.entriesFiltered = _.clone($this.entries);
+
+                return;
+            }
+
+            $this.entriesFiltered = _.filter($this.entries, function (o) {
+                var compare = o.name ? o.name : '';
+
+                compare += o.title ? o.title : '';
+                compare += o.slug ? o.slug : '';
+                compare = compare.toLowerCase().replace(/\s+/g, '');
+
+                return compare.indexOf(value) >= 0 ? true : false;
+            });
+
+            $this.update();
+        };
 
         remove(e) {
             this.links.splice(e.item.idx, 1);

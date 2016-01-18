@@ -33,6 +33,7 @@ In collection fields edit mode set `LINK` as field type.
 | collections | *string\|array* | Sets which collections to link, not set by default, meaning any existing collection can be linked
 | hasOne      | *boolean*       | Forces one-to-one relationship, default is `false`
 | createNew   | *string*        | Collection slug for new entries, not set by default
+| list        | *boolean*       | List and filter available collections to link (disables autocomplete)
 
 #### Examples
 
