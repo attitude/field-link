@@ -1,4 +1,4 @@
-riot.tag2('field-link', '<div> <div if="{!resultsLoaded}" class="uk-alert" if="{!fields.length}"> {App.i18n.get(\'Loading field\')} </div> <div if="{!opts.list && resultsLoaded && (!opts.hasOne || opts.hasOne && links.length < 1)}" name="autocomplete" class="uk-autocomplete uk-form-icon uk-form uk-width-1-1"> <i class="uk-icon-link"></i> <input name="input" class="uk-width-1-1 uk-form-blank" autocomplete="off" type="text" placeholder="{App.i18n.get(opts.placeholder || \'Add Link...\')}"> </div> <div if="{opts.list && resultsLoaded}" class="uk-form-icon uk-form uk-width-1-1"> <i class="uk-icon-link"></i> <input onkeyup="{filterEntries}" name="input" class="uk-width-1-1 uk-form-blank" autocomplete="off" type="text" placeholder="{App.i18n.get(opts.placeholder || \'Add Link...\')}"> </div> <div if="{resultsLoaded}" class="uk-margin uk-panel uk-panel-box" show="{links && links.length}"> <ul class="uk-list" each="{link,idx in links}"> <li><a onclick="{parent.remove}"><i class="uk-icon-close"></i> {linkName(link, idx)}</a></li> </ul> </div> <div if="{opts.list && resultsLoaded}" class="list-entries {entriesFiltered.length > 6 ? \'is-overflown\' : \'\'}"> <ul if="{entriesFiltered.length > 0}" class="uk-list uk-list-line"> <li each="{entry, idx in entriesFiltered}" if="{links.indexOf(entry._id) < 0}" onclick="{toggle}"> <i class="uk-icon-plus"></i> <span>{entry.name || entry.title || entry.slug || entry._id}</span> </li> </ul> <span if="{entriesFiltered.length < 1}">No entries</span> </div> </div>', 'field-link .list-entries,[riot-tag="field-link"] .list-entries { max-height: 197px; overflow: auto; padding: 0 15px; } field-link .is-overflown,[riot-tag="field-link"] .is-overflown { box-shadow: inset 0 -10px 30px -20px rgba(0,0,0,0.25); }', '', function(opts) {
+riot.tag2('field-link', '<div> <div if="{!resultsLoaded}" class="uk-alert" if="{!fields.length}"> {App.i18n.get(\'Loading field\')} </div> <div if="{!opts.list && resultsLoaded && (!opts.hasOne || opts.hasOne && links.length < 1)}" name="autocomplete" class="uk-autocomplete uk-form-icon uk-form uk-width-1-1"> <i class="uk-icon-link"></i> <input name="input" class="uk-width-1-1 uk-form-blank" autocomplete="off" type="text" placeholder="{App.i18n.get(opts.placeholder || \'Add Link...\')}"> </div> <div if="{opts.list && resultsLoaded}" class="uk-form-icon uk-form uk-width-1-1"> <i class="uk-icon-link"></i> <input onkeydown="{keyUp}" onkeypress="{keyUp}" onkeyup="{keyUp}" name="filterinput" class="uk-width-1-1 uk-form-blank" autocomplete="off" type="text" placeholder="{App.i18n.get(opts.placeholder || \'Add Link...\')}"> <a if="{filterinput.value.trim().length > 0}" class="reset-field" onclick="{resetfilterinput}"><i class="uk-icon-times-circle"></i></a> </div> <div if="{resultsLoaded}" class="uk-margin-top uk-panel"> <ul class="uk-nav uk-nav-linked" each="{link,idx in links}"> <li><a onclick="{parent.remove}"><i class="uk-icon-close"></i> {linkName(link, idx)}</a></li> </ul> <div if="{opts.list}" class="list-entries {entriesFiltered.length > 6 ? \'is-overflown\' : \'\'}"> <ul if="{entriesFiltered.length > 0}" class="uk-nav"> <li each="{entry, idx in entriesFiltered}" onclick="{toggle}"> <a class="{idx === focusedEntry ? \'uk-selected\' : \'\'}"> <i class="uk-icon-plus"></i> <span>{entry.name || entry.title || entry.slug || entry._id}</span> </a> </li> </ul> <div if="{entriesFiltered.length < 1}" class="uk-alert">No entries</div> </div> </div> </div>', 'field-link .uk-nav-linked,[riot-tag="field-link"] .uk-nav-linked { background: white; } field-link .list-entries,[riot-tag="field-link"] .list-entries { max-height: 197px; overflow: auto; } field-link .uk-nav,[riot-tag="field-link"] .uk-nav { -webkit-touch-callout: none; -webkit-user-select: none; -khtml-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; } field-link .is-overflown,[riot-tag="field-link"] .is-overflown { box-shadow: inset 0 -10px 30px -20px rgba(0,0,0,0.25); } field-link .reset-field,[riot-tag="field-link"] .reset-field { height: 30px; line-height: 30px; position: absolute; right: 0; text-align: center; top: 0; width: 30px; z-index: 1; }', '', function(opts) {
         if (opts.__proto__ && opts.__proto__.list) {
             opts.list = opts.__proto__.list;
         }
@@ -126,7 +126,10 @@ riot.tag2('field-link', '<div> <div if="{!resultsLoaded}" class="uk-alert" if="{
                         reject();
                     });
                 });
-            };
+            },
+            fixKeyUpDelay,
+            lastKeyEventTimestamp = null,
+            lastKeyEventKeyCode = 0;
 
         this.links = [];
         this.resultsLoaded = false;
@@ -164,8 +167,7 @@ riot.tag2('field-link', '<div> <div if="{!resultsLoaded}" class="uk-alert" if="{
 
                 $this.resultsLoaded = true;
 
-                $this.entries = _.sortBy($this.entries, function(o) { return o.name || o.title || o.id });
-                $this.entriesFiltered = _.clone($this.entries);
+                $this.sortFilterEntries();
 
                 $this.update();
             });
@@ -239,6 +241,7 @@ riot.tag2('field-link', '<div> <div if="{!resultsLoaded}" class="uk-alert" if="{
                             });
 
                             $this.input.value = '';
+                            $this.autocomplete.className = $this.autocomplete.className.replace(/\buk-open\b/, '').trim();
                             $this.update();
 
                             return;
@@ -259,6 +262,33 @@ riot.tag2('field-link', '<div> <div if="{!resultsLoaded}" class="uk-alert" if="{
             });
         });
 
+        this.sortFilterEntries = function(value) {
+            var value = value ? value.toLowerCase().replace(/\s+/g, '') : '';
+
+            $this.entries = _.sortBy($this.entries, function(o) { return o.name || o.title || o.id });
+
+            if (!value) {
+                $this.entriesFiltered = _.clone($this.entries);
+                $this.entriesFiltered = _.filter($this.entries, function (o) {
+                    return $this.links.indexOf(o._id) >= 0 ? false : true;
+                });
+            } else {
+                $this.entriesFiltered = _.filter($this.entries, function (o) {
+                    if ($this.links.indexOf(o._id) >= 0) {
+                        return false;
+                    }
+
+                    var compare = o.name ? o.name : '';
+
+                    compare += o.title ? o.title : '';
+                    compare += o.slug ? o.slug : '';
+                    compare = compare.toLowerCase().replace(/\s+/g, '');
+
+                    return compare.indexOf(value) >= 0 ? true : false;
+                });
+            }
+        }
+
         this.$updateValue = function(value) {
 
             if (!Array.isArray(value)) {
@@ -276,88 +306,289 @@ riot.tag2('field-link', '<div> <div if="{!resultsLoaded}" class="uk-alert" if="{
 
         }.bind(this);
 
-        this.toggle = function(e) {
-            console.log(e.item.entry._id, $this.links);
+        this.focusedEntry = -1;
+        this.focusedEntryReplaces = null;
 
-            if (e.item && e.item.entry && $this.links.indexOf(e.item.entry._id) >= 0) {
-                this.links.splice($this.links.indexOf(e.item.entry._id), 1);
-                this.$setValue(this.links);
-            } else {
-                $this.links.push(e.item.entry._id);
-                $this.$setValue(_.uniq($this.links));
-            }
-        }.bind(this)
-
-        this.filterEntries = function(e) {
+        this.handleEnter = function(e) {
             var element = e.srcElement || e.target,
-                value = element ? element.value.trim() : null;
-
-            if (e.keyCode === 13) {
-                if (opts.createNew) {
-                    console.log('Create', value);
-
-                    Cockpit.callmodule(
-                        'collections',
-                        'save',
-                        [opts.createNew, { name: value, title: value}],
-                        [opts.createNew, { name: value, title: value}]
-                    ).then(function (data) {
-                        if (!data.result) {
-                            e.stopImmediatePropagation();
-                            e.stopPropagation();
-                            e.preventDefault();
-
-                            App.ui.notify("Failed to create link. Try again later?", "danger");
-
-                            return;
-                        }
-
-                        element.value = '';
-
-                        $this.entries.push(data.result);
-
-                        $this.entries = _.sortBy($this.entries, function(o) { return o.name || o.title || o.id });
-                        $this.entriesFiltered = _.clone($this.entries);
-
-                        $this.links.push(data.result._id);
-                        $this.$setValue(_.uniq($this.links));
-                        $this.update();
-
-                        return;
-                    }).catch(function (data) {
-                        App.ui.notify("Failed to create link. Try again later?", "danger");
-                        $this.update();
-                        return;
-                    });
-                }
-
-                return;
-            }
-
-            value = value.toLowerCase().replace(/\s+/g, '')
+                value = element ? element.value.trim() : '',
+                valueCompare,
+                alreadyExists;
 
             if (!value) {
-                $this.entriesFiltered = _.clone($this.entries);
+                return;
+            }
+
+            valueCompare = value.toLowerCase();
+
+            alreadyExists = _.filter($this.entries, function (o) {
+                return o.name  && o.name.toLowerCase().trim() === valueCompare
+                    || o.title && o.title.toLowerCase().trim() === valueCompare
+                    || o.slug  && o.slug.toLowerCase().trim() === valueCompare
+                    || false;
+            });
+
+            if (alreadyExists.length > 0) {
+                $this.links.push(alreadyExists[0]._id);
+                $this.$setValue(_.uniq($this.links));
+
+                $this.sortFilterEntries();
+
+                if ($this.focusedEntry === -1) {
+                    element.value = '';
+                } else {
+                    if ($this.focusedEntry >= $this.entriesFiltered.length) {
+                        $this.focusedEntry = $this.entriesFiltered.length - 1;
+                    }
+
+                    element.value = $this.entriesFiltered[$this.focusedEntry].name
+                        || $this.entriesFiltered[$this.focusedEntry].title
+                        || $this.entriesFiltered[$this.focusedEntry].slug
+                        || $this.focusedEntryReplaces
+                        || '';
+                }
+
+                $this.update();
 
                 return;
             }
 
-            $this.entriesFiltered = _.filter($this.entries, function (o) {
-                var compare = o.name ? o.name : '';
+            if (opts.createNew) {
+                Cockpit.callmodule(
+                    'collections',
+                    'save',
+                    [opts.createNew, { name: value, title: value}],
+                    [opts.createNew, { name: value, title: value}]
+                ).then(function (data) {
+                    if (!data.result) {
+                        e.stopImmediatePropagation();
+                        e.stopPropagation();
+                        e.preventDefault();
 
-                compare += o.title ? o.title : '';
-                compare += o.slug ? o.slug : '';
-                compare = compare.toLowerCase().replace(/\s+/g, '');
+                        App.ui.notify("Failed to create link. Try again later?", "danger");
 
-                return compare.indexOf(value) >= 0 ? true : false;
-            });
+                        return;
+                    }
+
+                    element.value = '';
+
+                    $this.entries.push(data.result);
+
+                    $this.sortFilterEntries();
+
+                    $this.links.push(data.result._id);
+                    $this.$setValue(_.uniq($this.links));
+
+                    $this.focusedEntry = -1;
+                    $this.focusedEntryReplaces = null;
+
+                    $this.update();
+
+                    return false;
+                }).catch(function (data) {
+                    App.ui.notify("Failed to create link. Try again later?", "danger");
+                    $this.update();
+                    return;
+                });
+            } else {
+                App.ui.notify("Link does not exist.", "danger");
+            }
+        }.bind(this)
+
+        this.handleScrollIntoView = function() {
+            var element = $this.root.getElementsByClassName('uk-selected'),
+                overflown = $this.root.getElementsByClassName('is-overflown'),
+                top,
+                scrollTop,
+                dpheight,
+                parent;
+
+            if (!element.length || !overflown.length) {
+                return;
+            }
+
+            element = element[0];
+            overflown = overflown[0];
+
+            elementRect = element.getBoundingClientRect();
+            overflownRect = overflown.getBoundingClientRect();
+
+            if (elementRect.bottom > overflownRect.bottom) {
+                overflown.scrollTop = overflown.scrollTop + elementRect.bottom - overflownRect.bottom;
+
+                return;
+            }
+
+            if (elementRect.top < overflownRect.top) {
+                overflown.scrollTop = overflown.scrollTop + elementRect.top - overflownRect.top;
+
+                return;
+            }
+        }.bind(this)
+
+        this.handleUp = function(e) {
+            var element = e.srcElement || e.target;
+
+            $this.focusedEntry = $this.focusedEntry - 1;
+
+            if ($this.focusedEntry < -1) {
+                $this.focusedEntry = -1;
+            }
+
+            if ($this.focusedEntry === -1) {
+                element.value = $this.focusedEntryReplaces;
+            } else {
+                element.value = $this.entriesFiltered[$this.focusedEntry].name
+                    || $this.entriesFiltered[$this.focusedEntry].title
+                    || $this.entriesFiltered[$this.focusedEntry].slug
+                    || $this.focusedEntryReplaces;
+            }
 
             $this.update();
-        }.bind(this);
 
-        this.remove = function(e) {
-            this.links.splice(e.item.idx, 1);
-            this.$setValue(this.links);
+            $this.handleScrollIntoView();
         }.bind(this)
+
+        this.handleDown = function(e) {
+            var element = e.srcElement || e.target;
+
+            $this.focusedEntry = $this.focusedEntry + 1;
+
+            if ($this.focusedEntry === 0) {
+                $this.focusedEntryReplaces = element.value.trim();
+            }
+
+            if ($this.focusedEntry >= $this.entriesFiltered.length) {
+                $this.focusedEntry = $this.entriesFiltered.length - 1;
+            }
+
+            element.value = $this.entriesFiltered[$this.focusedEntry].name
+                || $this.entriesFiltered[$this.focusedEntry].title
+                || $this.entriesFiltered[$this.focusedEntry].slug
+                || $this.focusedEntryReplaces;
+
+            $this.update();
+
+            $this.handleScrollIntoView();
+        }.bind(this)
+
+        this.keyUp = function(e) {
+            var dateNow = Date.now(),
+                keyCode = e.keyCode || e.charCode || e.which || 0;
+
+            lastKeyEventTimestamp = dateNow;
+            clearTimeout(fixKeyUpDelay);
+
+            if (dateNow - lastKeyEventTimestamp < 50)
+
+            if (keyCode === 13)  {
+                fixKeyUpDelay = setTimeout(function () { $this.handleEnter(e); }, e.type === 'keydown' ? 300 : 50);
+
+                return false;
+            }
+
+            if (keyCode === 40) {
+                fixKeyUpDelay = setTimeout(function () { $this.handleDown(e); }, e.type === 'keydown' ? 300 : 50);
+
+                return false;
+            }
+
+            if (keyCode === 38) {
+                fixKeyUpDelay = setTimeout(function () { $this.handleUp(e); }, e.type === 'keydown' ? 300 : 50);
+
+                return false;
+            }
+
+            fixKeyUpDelay = setTimeout(function () {
+                $this.fiterEntries(e);
+            }, e.type === 'keydown' ? 300 : 10);
+
+            return true;
+        }.bind(this)
+
+        this.fiterEntries = function(e) {
+            var element = e.srcElement || e.target,
+                keyCode = e.keyCode || e.charCode || e.which || 0,
+                value = element ? element.value.trim() : '',
+                valueCompare = value.toLowerCase(),
+                alreadyExists;
+
+            $this.logKey(e);
+
+            if (value.toLowerCase().replace(/\s+/g, '').length === 0) {
+                $this.entriesFiltered = _.clone($this.entries);
+                $this.update();
+
+                return true;
+            }
+
+            $this.sortFilterEntries(value);
+            $this.update();
+
+            return true;
+        }.bind(this)
+
+        this.logKey = function (e) {
+            var element = e.srcElement || e.target,
+                value = element ? element.value.trim() : '';
+
+            return true;
+        }
+
+        this.remove = function (e) {
+            this.removeIndex(e.item.idx);
+            $this.filterinput.focus();
+
+            $this.sortFilterEntries();
+            $this.update();
+        }
+
+        this.toggle = function (e) {
+            var index = this.links.indexOf(e.item.entry._id);
+
+            if (e.item && e.item.entry && index >= 0) {
+                this.removeIndex(index);
+            } else {
+                this.addId(e.item.entry._id);
+            }
+
+            $this.filterinput.focus();
+            $this.sortFilterEntries();
+            $this.update();
+        }
+
+        this.removeIndex = function (index) {
+            if (index < 0) {
+                return;
+            }
+
+            this.links.splice(index, 1);
+            this.$setValue(this.links);
+        }
+
+        this.removeId = function (id) {
+            if (!id) {
+                return;
+            }
+
+            this.removeIndex(this.links.indexOf(id));
+        }
+
+        this.addId = function (id) {
+            if (!id) {
+                return;
+            }
+
+            this.links.push(id);
+            this.$setValue(_.uniq(this.links));
+        }
+
+        this.resetfilterinput = function () {
+            $this.filterinput.value = '';
+            $this.filterinput.focus();
+
+            $this.sortFilterEntries();
+            $this.update();
+        }
 
 }, '{ }');

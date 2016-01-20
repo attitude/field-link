@@ -8,7 +8,13 @@ Allows you to link collections with other collections (`has many` & `has one` re
 
 You can also specify which colelctions to link (single or multiple) or create children from parent and link them automatically.
 
-![Preview](preview.gif)
+##### Autocomplete Mode:
+
+![Autocomplete](preview.gif)
+
+##### List Mode:
+
+![List](preview-list.gif)
 
 ## Installation
 

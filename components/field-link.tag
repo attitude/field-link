@@ -12,36 +12,61 @@
 
         <div if="{opts.list && resultsLoaded}" class="uk-form-icon uk-form uk-width-1-1">
             <i class="uk-icon-link"></i>
-            <input onkeyup="{filterEntries}" name="input" class="uk-width-1-1 uk-form-blank" autocomplete="off" type="text" placeholder="{ App.i18n.get(opts.placeholder || 'Add Link...') }">
+            <input onkeydown="{keyUp}" onkeypress="{keyUp}" onkeyup="{keyUp}" name="filterinput" class="uk-width-1-1 uk-form-blank" autocomplete="off" type="text" placeholder="{ App.i18n.get(opts.placeholder || 'Add Link...') }">
+            <a if="{filterinput.value.trim().length > 0}" class="reset-field" onclick="{resetfilterinput}"><i class="uk-icon-times-circle"></i></a>
         </div>
 
-        <div if="{resultsLoaded}" class="uk-margin uk-panel uk-panel-box" show="{ links && links.length }">
-            <ul class="uk-list" each="{ link,idx in links }">
+        <div if="{resultsLoaded}" class="uk-margin-top uk-panel">
+            <ul class="uk-nav uk-nav-linked" each="{ link,idx in links }">
                 <li><a onclick="{ parent.remove }"><i class="uk-icon-close"></i> { linkName(link, idx) }</a></li>
             </ul>
-        </div>
-
-        <div if="{opts.list && resultsLoaded}" class="list-entries {entriesFiltered.length > 6 ? 'is-overflown' : ''}">
-            <ul if="{entriesFiltered.length > 0}" class="uk-list uk-list-line">
-                <li each="{entry, idx in entriesFiltered}" if="{links.indexOf(entry._id) < 0}" onclick="{toggle}">
-                    <i class="uk-icon-plus"></i>
-                    <span>{entry.name || entry.title || entry.slug || entry._id}</span>
+            <div if="{opts.list}" class="list-entries {entriesFiltered.length > 6 ? 'is-overflown' : ''}">
+            <ul if="{entriesFiltered.length > 0}" class="uk-nav">
+                <li each="{entry, idx in entriesFiltered}" onclick="{toggle}">
+                    <a class="{idx === focusedEntry ? 'uk-selected' : ''}">
+                        <i class="uk-icon-plus"></i>
+                        <span>{entry.name || entry.title || entry.slug || entry._id}</span>
+                    </a>
                 </li>
             </ul>
-            <span if="{entriesFiltered.length < 1}">No entries</span>
+            <div if="{entriesFiltered.length < 1}" class="uk-alert">No entries</div>
+        </div>
         </div>
 
     </div>
 
     <style scoped>
+        .uk-nav-linked {
+            background: white;
+        }
+
         .list-entries {
             max-height: 197px;
             overflow: auto;
-            padding: 0 15px;
+        }
+
+        .uk-nav {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -khtml-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
         }
 
         .is-overflown {
             box-shadow: inset 0 -10px 30px -20px rgba(0,0,0,0.25);
+        }
+
+        .reset-field {
+            height: 30px;
+            line-height: 30px;
+            position: absolute;
+            right: 0;
+            text-align: center;
+            top: 0;
+            width: 30px;
+            z-index: 1;
         }
     </style>
 
@@ -185,7 +210,10 @@
                         reject();
                     });
                 });
-            };
+            },
+            fixKeyUpDelay,
+            lastKeyEventTimestamp = null,
+            lastKeyEventKeyCode = 0;
 
         this.links = [];
         this.resultsLoaded = false;
@@ -223,11 +251,13 @@
             loadEntries().then(function (data) {
                 // Start autocomplete instance
                 UIkit.autocomplete($this.autocomplete, _.defaults({source: data}, autocompleteDefaults));
+
                 // Set loaded state
                 $this.resultsLoaded = true;
-                // Sort ascending
-                $this.entries = _.sortBy($this.entries, function(o) { return o.name || o.title || o.id });
-                $this.entriesFiltered = _.clone($this.entries);
+
+                // Sort entries
+                $this.sortFilterEntries();
+
                 // Update link
                 $this.update();
             });
@@ -307,6 +337,7 @@
 
                             // Remove the value
                             $this.input.value = '';
+                            $this.autocomplete.className = $this.autocomplete.className.replace(/\buk-open\b/, '').trim();
                             $this.update();
 
                             return;
@@ -327,6 +358,34 @@
             });
         });
 
+        this.sortFilterEntries = function(value) {
+            var value = value ? value.toLowerCase().replace(/\s+/g, '') : '';
+
+            // Sort ascending
+            $this.entries = _.sortBy($this.entries, function(o) { return o.name || o.title || o.id });
+
+            if (!value) {
+                $this.entriesFiltered = _.clone($this.entries);
+                $this.entriesFiltered = _.filter($this.entries, function (o) {
+                    return $this.links.indexOf(o._id) >= 0 ? false : true;
+                });
+            } else {
+                $this.entriesFiltered = _.filter($this.entries, function (o) {
+                    if ($this.links.indexOf(o._id) >= 0) {
+                        return false;
+                    }
+
+                    var compare = o.name ? o.name : '';
+
+                    compare += o.title ? o.title : '';
+                    compare += o.slug ? o.slug : '';
+                    compare = compare.toLowerCase().replace(/\s+/g, '');
+
+                    return compare.indexOf(value) >= 0 ? true : false;
+                });
+            }
+        }
+
         this.$updateValue = function(value) {
 
             if (!Array.isArray(value)) {
@@ -344,94 +403,298 @@
 
         }.bind(this);
 
-        toggle(e) {
-            console.log(e.item.entry._id, $this.links);
+        this.focusedEntry = -1;
+        this.focusedEntryReplaces = null;
 
-            // Remove
-            if (e.item && e.item.entry && $this.links.indexOf(e.item.entry._id) >= 0) {
-                this.links.splice($this.links.indexOf(e.item.entry._id), 1);
-                this.$setValue(this.links);
-            } else {
-                $this.links.push(e.item.entry._id);
+        handleEnter(e) {
+            var element = e.srcElement || e.target,
+                value = element ? element.value.trim() : '',
+                valueCompare,
+                alreadyExists;
+
+            if (!value) {
+                return;
+            }
+
+            valueCompare = value.toLowerCase();
+
+            alreadyExists = _.filter($this.entries, function (o) {
+                return o.name  && o.name.toLowerCase().trim() === valueCompare
+                    || o.title && o.title.toLowerCase().trim() === valueCompare
+                    || o.slug  && o.slug.toLowerCase().trim() === valueCompare
+                    || false;
+            });
+
+            if (alreadyExists.length > 0) {
+                $this.links.push(alreadyExists[0]._id);
                 $this.$setValue(_.uniq($this.links));
+
+                $this.sortFilterEntries();
+
+                // Remove value from input
+                if ($this.focusedEntry === -1) {
+                    element.value = '';
+                } else {
+                    if ($this.focusedEntry >= $this.entriesFiltered.length) {
+                        $this.focusedEntry = $this.entriesFiltered.length - 1;
+                    }
+
+                    element.value = $this.entriesFiltered[$this.focusedEntry].name
+                        || $this.entriesFiltered[$this.focusedEntry].title
+                        || $this.entriesFiltered[$this.focusedEntry].slug
+                        || $this.focusedEntryReplaces
+                        || '';
+                }
+
+                $this.update();
+
+                return;
+            }
+
+            if (opts.createNew) {
+                Cockpit.callmodule(
+                    'collections',
+                    'save',
+                    [opts.createNew, { name: value, title: value}],
+                    [opts.createNew, { name: value, title: value}]
+                ).then(function (data) {
+                    if (!data.result) {
+                        e.stopImmediatePropagation();
+                        e.stopPropagation();
+                        e.preventDefault();
+
+                        App.ui.notify("Failed to create link. Try again later?", "danger");
+
+                        return;
+                    }
+
+                    // Remove value from input
+                    element.value = '';
+
+                    // Add as a valid option
+                    $this.entries.push(data.result);
+
+                    // Set entries
+                    $this.sortFilterEntries();
+
+                    // set value with new ID
+                    $this.links.push(data.result._id);
+                    $this.$setValue(_.uniq($this.links));
+
+                    // Set focus
+                    $this.focusedEntry = -1;
+                    $this.focusedEntryReplaces = null;
+
+                    $this.update();
+
+                    return false;
+                }).catch(function (data) {
+                    App.ui.notify("Failed to create link. Try again later?", "danger");
+                    $this.update();
+                    return;
+                });
+            } else {
+                App.ui.notify("Link does not exist.", "danger");
             }
         }
 
-        filterEntries(e) {
-            var element = e.srcElement || e.target,
-                value = element ? element.value.trim() : null;
+        handleScrollIntoView() {
+            var element = $this.root.getElementsByClassName('uk-selected'),
+                overflown = $this.root.getElementsByClassName('is-overflown'),
+                top,
+                scrollTop,
+                dpheight,
+                parent;
 
-            if (e.keyCode === 13) {
-                if (opts.createNew) {
-                    console.log('Create', value);
+            if (!element.length || !overflown.length) {
+                return;
+            }
 
-                    Cockpit.callmodule(
-                        'collections',
-                        'save',
-                        [opts.createNew, { name: value, title: value}],
-                        [opts.createNew, { name: value, title: value}]
-                    ).then(function (data) {
-                        if (!data.result) {
-                            e.stopImmediatePropagation();
-                            e.stopPropagation();
-                            e.preventDefault();
+            element = element[0];
+            overflown = overflown[0];
 
-                            App.ui.notify("Failed to create link. Try again later?", "danger");
+            elementRect = element.getBoundingClientRect();
+            overflownRect = overflown.getBoundingClientRect();
 
-                            return;
-                        }
-
-                        // Remove value from input
-                        element.value = '';
-
-                        // Add as a valid option
-                        $this.entries.push(data.result);
-                        // Sort ascending
-                        $this.entries = _.sortBy($this.entries, function(o) { return o.name || o.title || o.id });
-                        $this.entriesFiltered = _.clone($this.entries);
-
-                        // set value with new ID
-                        $this.links.push(data.result._id);
-                        $this.$setValue(_.uniq($this.links));
-                        $this.update();
-
-                        return;
-                    }).catch(function (data) {
-                        App.ui.notify("Failed to create link. Try again later?", "danger");
-                        $this.update();
-                        return;
-                    });
-                } else {
-                    App.ui.notify("Link does not exist.", "danger");
-                }
+            if (elementRect.bottom > overflownRect.bottom) {
+                overflown.scrollTop = overflown.scrollTop + elementRect.bottom - overflownRect.bottom;
 
                 return;
             }
 
-            value = value.toLowerCase().replace(/\s+/g, '')
-
-            if (!value) {
-                $this.entriesFiltered = _.clone($this.entries);
+            if (elementRect.top < overflownRect.top) {
+                overflown.scrollTop = overflown.scrollTop + elementRect.top - overflownRect.top;
 
                 return;
             }
+        }
 
-            $this.entriesFiltered = _.filter($this.entries, function (o) {
-                var compare = o.name ? o.name : '';
+        handleUp(e) {
+            var element = e.srcElement || e.target;
 
-                compare += o.title ? o.title : '';
-                compare += o.slug ? o.slug : '';
-                compare = compare.toLowerCase().replace(/\s+/g, '');
+            $this.focusedEntry = $this.focusedEntry - 1;
 
-                return compare.indexOf(value) >= 0 ? true : false;
-            });
+            if ($this.focusedEntry < -1) {
+                $this.focusedEntry = -1;
+            }
+
+            if ($this.focusedEntry === -1) {
+                element.value = $this.focusedEntryReplaces;
+            } else {
+                element.value = $this.entriesFiltered[$this.focusedEntry].name
+                    || $this.entriesFiltered[$this.focusedEntry].title
+                    || $this.entriesFiltered[$this.focusedEntry].slug
+                    || $this.focusedEntryReplaces;
+            }
 
             $this.update();
-        };
 
-        remove(e) {
-            this.links.splice(e.item.idx, 1);
+            $this.handleScrollIntoView();
+        }
+
+        handleDown(e) {
+            var element = e.srcElement || e.target;
+
+            $this.focusedEntry = $this.focusedEntry + 1;
+
+            if ($this.focusedEntry === 0) {
+                $this.focusedEntryReplaces = element.value.trim();
+            }
+
+            if ($this.focusedEntry >= $this.entriesFiltered.length) {
+                $this.focusedEntry = $this.entriesFiltered.length - 1;
+            }
+
+            element.value = $this.entriesFiltered[$this.focusedEntry].name
+                || $this.entriesFiltered[$this.focusedEntry].title
+                || $this.entriesFiltered[$this.focusedEntry].slug
+                || $this.focusedEntryReplaces;
+
+            $this.update();
+
+            $this.handleScrollIntoView();
+        }
+
+        keyUp(e) {
+            var dateNow = Date.now(),
+                keyCode = e.keyCode || e.charCode || e.which || 0;
+
+            lastKeyEventTimestamp = dateNow;
+            clearTimeout(fixKeyUpDelay);
+
+            if (dateNow - lastKeyEventTimestamp < 50)
+
+            // Enter
+            if (keyCode === 13)  {
+                fixKeyUpDelay = setTimeout(function () { $this.handleEnter(e); }, e.type === 'keydown' ? 300 : 50);
+
+                return false; // Stop bulling
+            }
+
+            // Down
+            if (keyCode === 40) {
+                fixKeyUpDelay = setTimeout(function () { $this.handleDown(e); }, e.type === 'keydown' ? 300 : 50);
+
+                return false; // Stop bulling
+            }
+
+            // Up
+            if (keyCode === 38) {
+                fixKeyUpDelay = setTimeout(function () { $this.handleUp(e); }, e.type === 'keydown' ? 300 : 50);
+
+                return false; // Stop bulling
+            }
+
+            fixKeyUpDelay = setTimeout(function () {
+                $this.fiterEntries(e);
+            }, e.type === 'keydown' ? 300 : 10);
+
+            return true;
+        }
+
+        fiterEntries(e) {
+            var element = e.srcElement || e.target,
+                keyCode = e.keyCode || e.charCode || e.which || 0,
+                value = element ? element.value.trim() : '',
+                valueCompare = value.toLowerCase(),
+                alreadyExists;
+
+            $this.logKey(e);
+
+            if (value.toLowerCase().replace(/\s+/g, '').length === 0) {
+                $this.entriesFiltered = _.clone($this.entries);
+                $this.update();
+
+                return true;
+            }
+
+            $this.sortFilterEntries(value);
+            $this.update();
+
+            return true;
+        }
+
+        this.logKey = function (e) {
+            var element = e.srcElement || e.target,
+                value = element ? element.value.trim() : '';
+
+            return true;
+        }
+
+        this.remove = function (e) {
+            this.removeIndex(e.item.idx);
+            $this.filterinput.focus();
+
+            $this.sortFilterEntries();
+            $this.update();
+        }
+
+        this.toggle = function (e) {
+            var index = this.links.indexOf(e.item.entry._id);
+            // Remove
+            if (e.item && e.item.entry && index >= 0) {
+                this.removeIndex(index);
+            } else {
+                this.addId(e.item.entry._id);
+            }
+
+            $this.filterinput.focus();
+            $this.sortFilterEntries();
+            $this.update();
+        }
+
+        this.removeIndex = function (index) {
+            if (index < 0) {
+                return;
+            }
+
+            this.links.splice(index, 1);
             this.$setValue(this.links);
+        }
+
+        this.removeId = function (id) {
+            if (!id) {
+                return;
+            }
+
+            this.removeIndex(this.links.indexOf(id));
+        }
+
+        this.addId = function (id) {
+            if (!id) {
+                return;
+            }
+
+            this.links.push(id);
+            this.$setValue(_.uniq(this.links));
+        }
+
+        this.resetfilterinput = function () {
+            $this.filterinput.value = '';
+            $this.filterinput.focus();
+
+            $this.sortFilterEntries();
+            $this.update();
         }
 
     </script>
